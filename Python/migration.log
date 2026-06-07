@@ -1,0 +1,5 @@
+2026-06-04 21:55:03,638 - INFO - Connected successfully to SQL Server and MongoDB.
+2026-06-04 21:55:33,093 - INFO - Migration completed. Success: 181398, Failed: 0
+2026-06-07 23:18:22,246 - INFO - Connected successfully to SQL Server and MongoDB.
+2026-06-07 23:21:38,264 - INFO - Connected successfully to SQL Server and MongoDB.
+2026-06-07 23:23:43,962 - INFO - Migration completed. Success: 181398, Failed: 0
