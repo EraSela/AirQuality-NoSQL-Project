@@ -68,26 +68,39 @@ try:
 
     # -----------------------------
     # Query SQL Server
+    # Rebuild PM1, PM2.5, PM10 from normalized table
     # -----------------------------
 
     query = """
     SELECT
-        r.ReadingID,
+        r.SensorID,
         r.ReadingTime,
-        r.Temperature,
-        r.Humidity,
-        r.PM1,
-        r.PM25,
-        r.PM10,
+
+        MAX(r.Temperature) AS Temperature,
+        MAX(r.Humidity) AS Humidity,
+
+        MAX(CASE WHEN p.PollutantName = 'PM1' THEN r.Value END) AS PM1,
+        MAX(CASE WHEN p.PollutantName = 'PM2.5' THEN r.Value END) AS PM25,
+        MAX(CASE WHEN p.PollutantName = 'PM10' THEN r.Value END) AS PM10,
+
         s.SensorName,
         l.LocationName,
         l.Latitude,
         l.Longitude
-    FROM SensorReadings r
-    INNER JOIN Sensors s
+    FROM dbo.SensorReadings r
+    INNER JOIN dbo.Pollutants p
+        ON r.PollutantID = p.PollutantID
+    INNER JOIN dbo.Sensors s
         ON r.SensorID = s.SensorID
-    INNER JOIN Locations l
+    INNER JOIN dbo.Locations l
         ON s.LocationID = l.LocationID
+    GROUP BY
+        r.SensorID,
+        r.ReadingTime,
+        s.SensorName,
+        l.LocationName,
+        l.Latitude,
+        l.Longitude
     """
 
     cursor.execute(query)
@@ -102,17 +115,24 @@ try:
 
     for row in rows:
         try:
-            # Error scenario 1: invalid pollution values
-            if row.PM1 < 0 or row.PM25 < 0 or row.PM10 < 0:
-                logging.error(f"Invalid negative pollution value in ReadingID {row.ReadingID}")
+            # Error scenario 1: missing pollutant values
+            if row.PM1 is None or row.PM25 is None or row.PM10 is None:
+                logging.error(f"Missing pollution value for SensorID {row.SensorID} at {row.ReadingTime}")
                 error_count += 1
                 continue
 
-            # Error scenario 2: missing required values
-            if row.ReadingTime is None or row.SensorName is None or row.LocationName is None:
-                logging.error(f"Missing required value in ReadingID {row.ReadingID}")
+            # Error scenario 2: invalid pollution values
+            if row.PM1 < 0 or row.PM25 < 0 or row.PM10 < 0:
+                logging.error(f"Invalid negative pollution value for SensorID {row.SensorID} at {row.ReadingTime}")
                 error_count += 1
                 continue
+
+            # Error scenario 3: missing required values
+            if row.ReadingTime is None or row.SensorName is None or row.LocationName is None:
+                logging.error(f"Missing required value for SensorID {row.SensorID} at {row.ReadingTime}")
+                error_count += 1
+                continue
+
 
             pollution_score = (
                 row.PM1 * 0.2 +
@@ -120,12 +140,15 @@ try:
                 row.PM10 * 0.4
             )
 
+            document_id = f"{row.SensorID}_{row.ReadingTime}"
+
             document = {
-                "_id": row.ReadingID,
+                "_id": document_id,
 
                 "timestamp": row.ReadingTime,
 
                 "sensor": {
+                    "sensorId": row.SensorID,
                     "sensorName": row.SensorName
                 },
 
@@ -149,7 +172,7 @@ try:
             }
 
             collection.replace_one(
-                {"_id": row.ReadingID},
+                {"_id": document_id},
                 document,
                 upsert=True
             )
@@ -157,7 +180,7 @@ try:
             count += 1
 
         except Exception as row_error:
-            logging.error(f"Error migrating ReadingID {row.ReadingID}: {row_error}")
+            logging.error(f"Error migrating SensorID {row.SensorID} at {row.ReadingTime}: {row_error}")
             error_count += 1
 
     print(f"{count} records migrated successfully.")

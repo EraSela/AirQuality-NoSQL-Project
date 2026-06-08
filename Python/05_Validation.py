@@ -24,15 +24,36 @@ collection = mongo_db["sensor_readings"]
 print("========== DATA VALIDATION REPORT ==========\n")
 
 # -----------------------------
+# SQL grouped query
+# One row per sensor + timestamp
+# -----------------------------
+sql_grouped_query = """
+SELECT
+    r.SensorID,
+    r.ReadingTime,
+    MAX(r.Temperature) AS Temperature,
+    MAX(r.Humidity) AS Humidity,
+    MAX(CASE WHEN p.PollutantName = 'PM1' THEN r.Value END) AS PM1,
+    MAX(CASE WHEN p.PollutantName = 'PM2.5' THEN r.Value END) AS PM25,
+    MAX(CASE WHEN p.PollutantName = 'PM10' THEN r.Value END) AS PM10
+FROM dbo.SensorReadings r
+JOIN dbo.Pollutants p
+    ON r.PollutantID = p.PollutantID
+GROUP BY
+    r.SensorID,
+    r.ReadingTime
+"""
+
+# -----------------------------
 # 1. Count Validation
 # -----------------------------
-sql_cursor.execute("SELECT COUNT(*) FROM SensorReadings")
+sql_cursor.execute(f"SELECT COUNT(*) FROM ({sql_grouped_query}) x")
 sql_count = sql_cursor.fetchone()[0]
 
 mongo_count = collection.count_documents({})
 
 print("1. Record Count Validation")
-print("SQL Rows:", sql_count)
+print("SQL Grouped Readings:", sql_count)
 print("Mongo Documents:", mongo_count)
 
 if sql_count == mongo_count:
@@ -43,27 +64,28 @@ else:
 # -----------------------------
 # 2. Average PM2.5 Validation
 # -----------------------------
-sql_cursor.execute("SELECT AVG(PM25) FROM SensorReadings")
-sql_avg_pm25 = round(sql_cursor.fetchone()[0], 2)
+sql_cursor.execute(f"""
+SELECT ROUND(AVG(PM25), 2)
+FROM ({sql_grouped_query}) x
+""")
+sql_avg_pm25 = sql_cursor.fetchone()[0]
 
-mongo_avg_pm25 = list(collection.aggregate([
+mongo_avg_pm25_result = list(collection.aggregate([
     {
         "$group": {
             "_id": None,
-            "avgPM25": {
-                "$avg": "$measurements.pm25"
-            }
+            "avgPM25": {"$avg": "$measurements.pm25"}
         }
     }
-]))[0]["avgPM25"]
+]))
 
-mongo_avg_pm25 = round(mongo_avg_pm25, 2)
+mongo_avg_pm25 = round(mongo_avg_pm25_result[0]["avgPM25"], 2)
 
 print("2. Average PM2.5 Validation")
 print("SQL AVG PM2.5:", sql_avg_pm25)
 print("Mongo AVG PM2.5:", mongo_avg_pm25)
 
-if sql_avg_pm25 == mongo_avg_pm25:
+if float(sql_avg_pm25) == mongo_avg_pm25:
     print("PASS: Average PM2.5 matches\n")
 else:
     print("FAIL: Average PM2.5 does not match\n")
@@ -71,27 +93,28 @@ else:
 # -----------------------------
 # 3. Average Temperature Validation
 # -----------------------------
-sql_cursor.execute("SELECT AVG(Temperature) FROM SensorReadings")
-sql_avg_temp = round(sql_cursor.fetchone()[0], 2)
+sql_cursor.execute(f"""
+SELECT ROUND(AVG(Temperature), 2)
+FROM ({sql_grouped_query}) x
+""")
+sql_avg_temp = sql_cursor.fetchone()[0]
 
-mongo_avg_temp = list(collection.aggregate([
+mongo_avg_temp_result = list(collection.aggregate([
     {
         "$group": {
             "_id": None,
-            "avgTemperature": {
-                "$avg": "$measurements.temperature"
-            }
+            "avgTemperature": {"$avg": "$measurements.temperature"}
         }
     }
-]))[0]["avgTemperature"]
+]))
 
-mongo_avg_temp = round(mongo_avg_temp, 2)
+mongo_avg_temp = round(mongo_avg_temp_result[0]["avgTemperature"], 2)
 
 print("3. Average Temperature Validation")
 print("SQL AVG Temperature:", sql_avg_temp)
 print("Mongo AVG Temperature:", mongo_avg_temp)
 
-if sql_avg_temp == mongo_avg_temp:
+if float(sql_avg_temp) == mongo_avg_temp:
     print("PASS: Average Temperature matches\n")
 else:
     print("FAIL: Average Temperature does not match\n")
@@ -99,42 +122,43 @@ else:
 # -----------------------------
 # 4. Average Humidity Validation
 # -----------------------------
-sql_cursor.execute("SELECT AVG(Humidity) FROM SensorReadings")
-sql_avg_humidity = round(sql_cursor.fetchone()[0], 2)
+sql_cursor.execute(f"""
+SELECT ROUND(AVG(Humidity), 2)
+FROM ({sql_grouped_query}) x
+""")
+sql_avg_humidity = sql_cursor.fetchone()[0]
 
-mongo_avg_humidity = list(collection.aggregate([
+mongo_avg_humidity_result = list(collection.aggregate([
     {
         "$group": {
             "_id": None,
-            "avgHumidity": {
-                "$avg": "$measurements.humidity"
-            }
+            "avgHumidity": {"$avg": "$measurements.humidity"}
         }
     }
-]))[0]["avgHumidity"]
+]))
 
-mongo_avg_humidity = round(mongo_avg_humidity, 2)
+mongo_avg_humidity = round(mongo_avg_humidity_result[0]["avgHumidity"], 2)
 
 print("4. Average Humidity Validation")
 print("SQL AVG Humidity:", sql_avg_humidity)
 print("Mongo AVG Humidity:", mongo_avg_humidity)
 
-if sql_avg_humidity == mongo_avg_humidity:
+if float(sql_avg_humidity) == mongo_avg_humidity:
     print("PASS: Average Humidity matches\n")
 else:
     print("FAIL: Average Humidity does not match\n")
 
 # -----------------------------
-# 5. Hash Validation on Key Fields
+# 5. Hash Validation on First 1000 Records
 # -----------------------------
-sql_cursor.execute("""
+sql_cursor.execute(f"""
 SELECT TOP 1000
-    ReadingID,
+    SensorID,
+    ReadingTime,
     PM25,
-    PM10,
-    ReadingTime
-FROM SensorReadings
-ORDER BY ReadingID
+    PM10
+FROM ({sql_grouped_query}) x
+ORDER BY SensorID, ReadingTime
 """)
 
 sql_rows = sql_cursor.fetchall()
@@ -142,7 +166,8 @@ sql_rows = sql_cursor.fetchall()
 sql_hash_string = ""
 
 for row in sql_rows:
-    sql_hash_string += f"{row.ReadingID}-{row.PM25}-{row.PM10}-{row.ReadingTime};"
+    document_id = f"{row.SensorID}_{row.ReadingTime}"
+    sql_hash_string += f"{document_id}-{row.PM25}-{row.PM10}-{row.ReadingTime};"
 
 sql_hash = hashlib.md5(sql_hash_string.encode()).hexdigest()
 

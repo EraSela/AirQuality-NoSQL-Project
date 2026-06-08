@@ -5,23 +5,27 @@ SELECT COUNT(*) AS RawRows
 FROM dbo.combined_sensor_data;
 
 SELECT COUNT(*) AS Locations
-FROM Locations;
+FROM dbo.Locations;
 
 SELECT COUNT(*) AS Sensors
-FROM Sensors;
+FROM dbo.Sensors;
 
 SELECT COUNT(*) AS Pollutants
-FROM Pollutants;
+FROM dbo.Pollutants;
 
 SELECT COUNT(*) AS SensorReadings
-FROM SensorReadings;
+FROM dbo.SensorReadings;
+
 
 SELECT
     SensorID,
+    PollutantID,
     ReadingTime,
     COUNT(*) AS DuplicateCount
-FROM SensorReadings
+FROM dbo.SensorReadings
 GROUP BY
     SensorID,
+    PollutantID,
     ReadingTime
 HAVING COUNT(*) > 1;
+GO

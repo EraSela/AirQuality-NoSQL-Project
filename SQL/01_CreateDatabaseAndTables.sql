@@ -44,24 +44,24 @@ GO
 
 IF OBJECT_ID('dbo.SensorReadings', 'U') IS NULL
 BEGIN
-    CREATE TABLE SensorReadings
+    CREATE TABLE dbo.SensorReadings
     (
         ReadingID INT IDENTITY(1,1) PRIMARY KEY,
         SensorID INT NOT NULL,
+        PollutantID INT NOT NULL,
         ReadingTime DATETIME2 NOT NULL,
         Temperature FLOAT NOT NULL,
         Humidity FLOAT NOT NULL,
-        PM1 FLOAT NOT NULL,
-        PM25 FLOAT NOT NULL,
-        PM10 FLOAT NOT NULL,
+        Value FLOAT NOT NULL,
 
         FOREIGN KEY (SensorID)
-            REFERENCES Sensors(SensorID),
+            REFERENCES dbo.Sensors(SensorID),
+
+        FOREIGN KEY (PollutantID)
+            REFERENCES dbo.Pollutants(PollutantID),
 
         CHECK (Humidity BETWEEN 0 AND 100),
-        CHECK (PM1 >= 0),
-        CHECK (PM25 >= 0),
-        CHECK (PM10 >= 0)
+        CHECK (Value >= 0)
     );
 END
 GO

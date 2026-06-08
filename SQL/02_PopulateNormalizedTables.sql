@@ -3,10 +3,9 @@ GO
 
 --------------------------------------------------
 -- Locations
--- Insert only locations that do not already exist
 --------------------------------------------------
 
-INSERT INTO Locations
+INSERT INTO dbo.Locations
 (
     LocationName,
     Latitude,
@@ -17,17 +16,16 @@ SELECT DISTINCT
     c.latitude,
     c.longitude
 FROM dbo.combined_sensor_data c
-LEFT JOIN Locations l
+LEFT JOIN dbo.Locations l
     ON c.location = l.LocationName
 WHERE l.LocationID IS NULL;
 GO
 
 --------------------------------------------------
 -- Sensors
--- Insert only sensors that do not already exist
 --------------------------------------------------
 
-INSERT INTO Sensors
+INSERT INTO dbo.Sensors
 (
     SensorName,
     LocationID
@@ -36,19 +34,18 @@ SELECT DISTINCT
     c.sensor_id,
     l.LocationID
 FROM dbo.combined_sensor_data c
-INNER JOIN Locations l
+INNER JOIN dbo.Locations l
     ON c.location = l.LocationName
-LEFT JOIN Sensors s
+LEFT JOIN dbo.Sensors s
     ON c.sensor_id = s.SensorName
 WHERE s.SensorID IS NULL;
 GO
 
 --------------------------------------------------
 -- Pollutants
--- Insert only pollutants that do not already exist
 --------------------------------------------------
 
-INSERT INTO Pollutants
+INSERT INTO dbo.Pollutants
 (
     PollutantName,
     Unit
@@ -59,42 +56,108 @@ FROM
     VALUES
     ('PM1', 'µg/m³'),
     ('PM2.5', 'µg/m³'),
-    ('PM10', 'µg/m³'),
-    ('Temperature', '°C'),
-    ('Humidity', '%')
+    ('PM10', 'µg/m³')
 ) v(PollutantName, Unit)
-LEFT JOIN Pollutants p
+LEFT JOIN dbo.Pollutants p
     ON p.PollutantName = v.PollutantName
 WHERE p.PollutantID IS NULL;
 GO
 
 --------------------------------------------------
 -- Sensor Readings
--- Insert only readings that do not already exist
+-- PM1
 --------------------------------------------------
 
-INSERT INTO SensorReadings
+INSERT INTO dbo.SensorReadings
 (
     SensorID,
+    PollutantID,
     ReadingTime,
     Temperature,
     Humidity,
-    PM1,
-    PM25,
-    PM10
+    Value
 )
 SELECT
     s.SensorID,
+    p.PollutantID,
     c.[time],
     c.OPC_T,
     c.OPC_RH,
-    c.pm1,
-    c.pm2_5,
-    c.pm10
+    c.pm1
 FROM dbo.combined_sensor_data c
-INNER JOIN Sensors s
+INNER JOIN dbo.Sensors s
     ON c.sensor_id = s.SensorName
-LEFT JOIN SensorReadings r
+INNER JOIN dbo.Pollutants p
+    ON p.PollutantName = 'PM1'
+LEFT JOIN dbo.SensorReadings r
     ON r.SensorID = s.SensorID
+    AND r.PollutantID = p.PollutantID
     AND r.ReadingTime = c.[time]
 WHERE r.ReadingID IS NULL;
+GO
+
+--------------------------------------------------
+-- Sensor Readings
+-- PM2.5
+--------------------------------------------------
+
+INSERT INTO dbo.SensorReadings
+(
+    SensorID,
+    PollutantID,
+    ReadingTime,
+    Temperature,
+    Humidity,
+    Value
+)
+SELECT
+    s.SensorID,
+    p.PollutantID,
+    c.[time],
+    c.OPC_T,
+    c.OPC_RH,
+    c.pm2_5
+FROM dbo.combined_sensor_data c
+INNER JOIN dbo.Sensors s
+    ON c.sensor_id = s.SensorName
+INNER JOIN dbo.Pollutants p
+    ON p.PollutantName = 'PM2.5'
+LEFT JOIN dbo.SensorReadings r
+    ON r.SensorID = s.SensorID
+    AND r.PollutantID = p.PollutantID
+    AND r.ReadingTime = c.[time]
+WHERE r.ReadingID IS NULL;
+GO
+
+--------------------------------------------------
+-- Sensor Readings
+-- PM10
+--------------------------------------------------
+
+INSERT INTO dbo.SensorReadings
+(
+    SensorID,
+    PollutantID,
+    ReadingTime,
+    Temperature,
+    Humidity,
+    Value
+)
+SELECT
+    s.SensorID,
+    p.PollutantID,
+    c.[time],
+    c.OPC_T,
+    c.OPC_RH,
+    c.pm10
+FROM dbo.combined_sensor_data c
+INNER JOIN dbo.Sensors s
+    ON c.sensor_id = s.SensorName
+INNER JOIN dbo.Pollutants p
+    ON p.PollutantName = 'PM10'
+LEFT JOIN dbo.SensorReadings r
+    ON r.SensorID = s.SensorID
+    AND r.PollutantID = p.PollutantID
+    AND r.ReadingTime = c.[time]
+WHERE r.ReadingID IS NULL;
+GO
